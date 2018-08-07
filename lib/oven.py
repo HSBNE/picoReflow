@@ -10,9 +10,12 @@ import config
 log = logging.getLogger(__name__)
 
 try:
-    if config.max31855 + config.max6675 + config.max31855spi > 1:
+    if config.max31855 + config.max6675 + config.max31855spi + config.max31850 > 1:
         log.error("choose (only) one converter IC")
         exit()
+    if config.max31850:
+        from max31850 import MAX31850
+        log.info("import MAX31850")
     if config.max31855:
         from max31855 import MAX31855, MAX31855Error
         log.info("import MAX31855")
