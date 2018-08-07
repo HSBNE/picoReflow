@@ -20,28 +20,52 @@ currency_type   = "EUR"   # Currency Symbol to show when calculating cost to run
 #
 #   GPIO Setup (BCM SoC Numbering Schema)
 #
-#   Check the RasPi docs to see where these GPIOs are
-#   connected on the P1 header for your board type/rev.
-#   These were tested on a Pi B Rev2 but of course you
-#   can use whichever GPIO you prefer/have available.
+#   Check Orange Pi Zero doco from orangepi_PC_gpio_pyH3
+#
 
 ### Outputs
-gpio_heat = 11  # Switches zero-cross solid-state-relay
-gpio_cool = 10  # Regulates PWM for 12V DC Blower
-gpio_air  = 9   # Switches 0-phase det. solid-state-relay
+gpio_reset = PA1      # Reset line for the MCP23008 chip
+gpio_cool = PA2       # 38Vdc blower enable
+gpio_watchdog = PA6   # watchdog, 250ms tickle
+
+### Outputs via GPIO expander module
+i2c_gpio_element_0 = 7
+i2c_gpio_element_1 = 6
+i2c_gpio_element_2 = 5
+i2c_gpio_element_3 = 4
+i2c_gpio_element_4 = 3
+i2c_gpio_element_5 = 2
+i2c_gpio_case = 1  # internal case cooling fan
+i2c_gpio_air = 0   # re-circulate relay
+i2c_gpio_bus = 0   # i2c bus used for GPIO expander
+
+### Watchdog timer via i2c ds1371 chipset
+i2c_watchdog_bus = 1
+i2c_watchdog_id = 0x68
+i2c_watchdog_reg = 0x07
+i2c_watchdog_val = 0x0E
 
 heater_invert = 0 # switches the polarity of the heater control
+heater_ac_pattern = 6      # Number of AC element channels to cycle
+heater_ac_time_ms = 10     # Half wave 50Hz
+heater_ac_time_period = 10 # ten periods per cycle increment
 
 ### Inputs
-gpio_door = 18
+gpio_door = -1
 
 ### Thermocouple Adapter selection:
 #   max31855 - bitbang SPI interface
 #   max31855spi - kernel SPI interface
 #   max6675 - bitbang SPI interface
-max31855 = 1
+max31850 = 1
+max31855 = 0
 max6675 = 0
 max31855spi = 0 # if you use this one, you MUST reassign the default GPIO pins
+
+## w1 thermocouple Connections
+w1_id_top=3b-2cfc0958c4cc
+w1_id_bottom=3b-2cfc0958c4e3
+w1_id_hotair=3b-2cfc0958c4ee
 
 ### Thermocouple Connection (using bitbang interfaces)
 gpio_sensor_cs = 27
