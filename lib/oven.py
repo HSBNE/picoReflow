@@ -54,8 +54,43 @@ except ImportError:
     msg = "Could not initialize GPIOs, oven operation will only be simulated!"
     log.warning(msg)
     gpio_available = False
+except RuntimeError:
+    msg = "Could not load RPi.GPIO library, trying OrangePiZero library"
+    log.warning(msg)
+    gpio_available = False
 
+    try:
+        from pyA20.gpio import gpio2
+        from pyA20.gpio import port
+        from pyA20.i2c import i2c0
+        from pyA20.i2c import i2c1
 
+        i2c0.init("/dev/i2c-0")  #Initialize module to use /dev/i2c-0
+        i2c0.open(0x68)  #The slave device address is 0x68 DS1371
+
+        #If we want to write to some register
+        i2c0.write([0x07, 0x0E]) #Write 0x0E to register 0x07
+        
+        #Initialise the GPIO output
+        gpio2.init() #Initialize module. Always called first
+
+        gpio2.setcfg(port.[config.gpio_reset], gpio2.OUTPUT)  #Configure Reset as OUTPUT
+        gpio2.output(port.[config.gpio_reset], gpio2.HIGH)    # Set the i2c GPIO reset line High
+        
+        i2c1.init("/dev/i2c-1")  #Initialize module to use /dev/i2c-0
+        i2c1.open(0x20)  #The slave device address is 0x68 DS1371
+
+        #If we want to write to some register
+        i2c1.write([10, 0xFF]) # Write outputs to HIGH to register 10
+        i2c1.write([0, 0xFF])  # Set as outputs to HIGH to register 0
+
+        i2c_gpio_available = True
+        
+    except ImportError:
+        msg = "Could not initialize GPIOs or i2c for OrangePiZero, oven operation will only be simulated!"
+        log.warning(msg)
+        i2c_gpio_available = False
+        
 class Oven (threading.Thread):
     STATE_IDLE = "IDLE"
     STATE_RUNNING = "RUNNING"
@@ -174,7 +209,27 @@ class Oven (threading.Thread):
                else:
                  GPIO.output(config.gpio_heat, GPIO.HIGH)
                  time.sleep(self.time_step * value)
-                 GPIO.output(config.gpio_heat, GPIO.LOW)   
+                 GPIO.output(config.gpio_heat, GPIO.LOW)
+             if i2c_gpio_available:
+               ''' Send the PID to the IO spamming thread
+                   Cycle the elements in sequence of
+                   H----- = 8%
+                   H--L-- = 16%
+                   H-L-H- = 25%
+                   F--F-- = 33%
+                   FH-FL- = 43%
+                   FF-F-- = 50%
+                   FF-FH- = 58%
+                   FF-FF- = 67%
+                   FFHFF- = 75%
+                   FFHFFL = 83%
+                   FFFFFL = 92%
+                   FFFFFF = 100%
+                   
+                   F = full AC cycle, H = top half, L = bottom half, - = Off
+                   
+                   Rotate the sequence right every half AC cycle (or multiple of)
+               ''' 
         else:
             self.heat = 0.0
             if gpio_available:
@@ -188,10 +243,14 @@ class Oven (threading.Thread):
             self.cool = 1.0
             if gpio_available:
                 GPIO.output(config.gpio_cool, GPIO.LOW)
+            if i2c_gpio_available:
+                gpio2.output(port.[config.gpio_cool], gpio2.HIGH)
         else:
             self.cool = 0.0
             if gpio_available:
                 GPIO.output(config.gpio_cool, GPIO.HIGH)
+            if i2c_gpio_available:
+                gpio2.output(port.[config.gpio_cool], gpio2.LOW)
 
     def set_air(self, value):
         if value:
@@ -242,6 +301,11 @@ class TempSensorReal(TempSensor):
                                      config.gpio_sensor_data,
                                      config.temp_scale)
 
+        if config.max31850:
+            log.info("init MAX31850")
+            self.thermocouple = MAX31850(config.w1_top)
+            self.thermocouple_bottom = MAX31850(config.w1_bottom)
+            self.thermocouple_hotair = MAX31850(config.w1_hotair)
         if config.max31855:
             log.info("init MAX31855")
             self.thermocouple = MAX31855(config.gpio_sensor_cs,
