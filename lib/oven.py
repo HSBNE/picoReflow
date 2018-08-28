@@ -94,7 +94,8 @@ except RuntimeError:
 class Oven (threading.Thread):
     STATE_IDLE = "IDLE"
     STATE_RUNNING = "RUNNING"
-
+    HEAT_SEQ = 0
+    
     def __init__(self, simulate=False, time_step=config.sensor_time_wait):
         threading.Thread.__init__(self)
         self.daemon = True
@@ -211,7 +212,7 @@ class Oven (threading.Thread):
                  time.sleep(self.time_step * value)
                  GPIO.output(config.gpio_heat, GPIO.LOW)
              if i2c_gpio_available:
-               ''' Send the PID to the IO spamming thread
+                  ''' Send the PID to the IO spamming thread
                    Cycle the elements in sequence of
                    H----- = 8%
                    H--L-- = 16%
@@ -225,11 +226,28 @@ class Oven (threading.Thread):
                    FFHFFL = 83%
                    FFFFFL = 92%
                    FFFFFF = 100%
-                   
                    F = full AC cycle, H = top half, L = bottom half, - = Off
                    
                    Rotate the sequence right every half AC cycle (or multiple of)
                ''' 
+	                sequences = [     0b100000,   0b000000
+									  0b100000,   0b000100
+									  0b100010,   0b001000
+									  0b100100,   0b100100
+									  0b110100,   0b100110
+									  0b110100,   0b110100
+									  0b110110,   0b110100
+									  0b110110,   0b110110
+									  0b111110,   0b110110
+									  0b111110,   0b110111
+									  0b111110,   0b111111
+									  0b111111,   0b111111 ]
+                  
+                    output = sequences[(value * 12) - 1 - HEAT_SEQ]
+                    
+                    HEAT_SEQ = (HEAT_SEQ + 1) % 2
+                    i2c1.write([0, output])
+                   
         else:
             self.heat = 0.0
             if gpio_available:
