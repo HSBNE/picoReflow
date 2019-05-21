@@ -8,6 +8,7 @@ import json
 import config
 
 log = logging.getLogger(__name__)
+i2c_gpio_available = False
 
 try:
     if config.max31855 + config.max6675 + config.max31855spi + config.max31850 > 1:
@@ -59,38 +60,58 @@ except RuntimeError:
     log.warning(msg)
     gpio_available = False
 
-    try:
-        from pyA20.gpio import gpio2
-        from pyA20.gpio import port
-        from pyA20.i2c import i2c0
-        from pyA20.i2c import i2c1
+try:
+    from pyA20.gpio import gpio
+    from pyA20.gpio import port
+    from pyA20 import i2c
 
-        i2c0.init("/dev/i2c-0")  #Initialize module to use /dev/i2c-0
-        i2c0.open(0x68)  #The slave device address is 0x68 DS1371
+    log.warning("Hello")
 
-        #If we want to write to some register
-        i2c0.write([0x07, 0x0E]) #Write 0x0E to register 0x07
+    i2c.init("/dev/i2c-1")  #Initialize module to use /dev/i2c-1
+    i2c.open(0x68)          #The slave device address is 0x68 DS1371
+
+    #If we want to write to some register
+    i2c.write([0x07, 0x0E]) #Write 0x0E to register 0x07
         
-        #Initialise the GPIO output
-        gpio2.init() #Initialize module. Always called first
+    #Initialise the GPIO output
+    gpio.init() #Initialize module. Always called first
 
-        gpio2.setcfg(port.[config.gpio_reset], gpio2.OUTPUT)  #Configure Reset as OUTPUT
-        gpio2.output(port.[config.gpio_reset], gpio2.HIGH)    # Set the i2c GPIO reset line High
+    gpio.setcfg(config.gpio_watchdog, gpio.OUTPUT) # Configure the watchdog
+    gpio.setcfg(config.gpio_cool, gpio.OUTPUT)     # Configure the cooling output
+    gpio.setcfg(config.gpio_reset, gpio.OUTPUT)    # Configure Reset as OUTPUT
+    gpio.output(config.gpio_reset, gpio.HIGH)      # Set the i2c GPIO reset line High
         
-        i2c1.init("/dev/i2c-1")  #Initialize module to use /dev/i2c-0
-        i2c1.open(0x20)  #The slave device address is 0x68 DS1371
+    i2c.init("/dev/i2c-0")  #Initialize module to use /dev/i2c-0
+    i2c.open(0x20)  #The slave device address is 0x68 DS1371
 
-        #If we want to write to some register
-        i2c1.write([10, 0xFF]) # Write outputs to HIGH to register 10
-        i2c1.write([0, 0xFF])  # Set as outputs to HIGH to register 0
+    #If we want to write to some register
+    i2c.write([10, 0xFF]) # Write outputs to HIGH to register 10
+    i2c.write([0, 0x00])  # Set as outputs to HIGH to register 0
 
-        i2c_gpio_available = True
+    i2c_gpio_available = True
         
-    except ImportError:
-        msg = "Could not initialize GPIOs or i2c for OrangePiZero, oven operation will only be simulated!"
-        log.warning(msg)
-        i2c_gpio_available = False
-        
+except ImportError, e:
+    log.error('blah :' +str(e))
+    msg = "Could not initialize GPIOs or i2c for OrangePiZero, oven operation will only be simulated!"
+    log.warning(msg)
+    i2c_gpio_available = False
+
+class Watchdog(threading.Thread):
+   def __init__(self):
+      threading.Thread.__init__()
+
+   def run(self):
+      while True:
+         gpio.output(config.gpio_watchdog, gpio.LOW)
+         time.sleep(self.time_step)
+         gpio.output(config.gpio_watchdog, gpio.HIGH)
+         time.sleep(self.time_step)
+
+   def abort_run(self):
+      gpio.output(config.gpio_watchdog, gpio.LOW)
+      gpio.output(config.gpio_reset, gpio.LOW)
+      gpio.output(config.gpio_cool, gpio.HIGH)
+
 class Oven (threading.Thread):
     STATE_IDLE = "IDLE"
     STATE_RUNNING = "RUNNING"
@@ -99,6 +120,7 @@ class Oven (threading.Thread):
     def __init__(self, simulate=False, time_step=config.sensor_time_wait):
         threading.Thread.__init__(self)
         self.daemon = True
+        self.air = 0
         self.simulate = simulate
         self.time_step = time_step
         self.reset()
@@ -125,7 +147,10 @@ class Oven (threading.Thread):
         self.set_cool(False)
         self.set_air(False)
         self.pid = PID(ki=config.pid_ki, kd=config.pid_kd, kp=config.pid_kp)
-
+        self.HEAT_SEQ = 0
+        self.output = 0
+        self.rotate = 0
+        self.air = 0
     def run_profile(self, profile):
         log.info("Running profile %s" % profile.name)
         self.profile = profile
@@ -167,7 +192,7 @@ class Oven (threading.Thread):
                     # If the heat is on and nothing is changing, reset
                     # The direction or amount of change does not matter
                     # This prevents runaway in the event of a sensor read failure                   
-                    if temperature_count > 20:
+                    if temperature_count > 60:
                         log.info("Error reading sensor, oven temp not responding to heat.")
                         self.reset()
                 else:
@@ -193,8 +218,9 @@ class Oven (threading.Thread):
                 if self.runtime >= self.totaltime:
                     self.reset()
 
-            
-            if pid > 0:
+            if i2c_gpio_available:
+                time.sleep(self.time_step)
+            elif pid > 0:
                 time.sleep(self.time_step * (1 - pid))
             else:
                 time.sleep(self.time_step)
@@ -211,8 +237,8 @@ class Oven (threading.Thread):
                  GPIO.output(config.gpio_heat, GPIO.HIGH)
                  time.sleep(self.time_step * value)
                  GPIO.output(config.gpio_heat, GPIO.LOW)
-             if i2c_gpio_available:
-                  ''' Send the PID to the IO spamming thread
+            if i2c_gpio_available:
+                 ''' Send the PID to the IO spamming thread
                    Cycle the elements in sequence of
                    H----- = 8%
                    H--L-- = 16%
@@ -227,34 +253,44 @@ class Oven (threading.Thread):
                    FFFFFL = 92%
                    FFFFFF = 100%
                    F = full AC cycle, H = top half, L = bottom half, - = Off
-                   
+                   Side (bit 1) only enable during < 92% heat, as its bottom
                    Rotate the sequence right every half AC cycle (or multiple of)
-               ''' 
-	                sequences = [     0b100000,   0b000000
-									  0b100000,   0b000100
-									  0b100010,   0b001000
-									  0b100100,   0b100100
-									  0b110100,   0b100110
-									  0b110100,   0b110100
-									  0b110110,   0b110100
-									  0b110110,   0b110110
-									  0b111110,   0b110110
-									  0b111110,   0b110111
-									  0b111110,   0b111111
-									  0b111111,   0b111111 ]
-                  
-                    output = sequences[(value * 12) - 1 - HEAT_SEQ]
-                    
-                    HEAT_SEQ = (HEAT_SEQ + 1) % 2
-                    i2c1.write([0, output])
-                   
+                 ''' 
+	         sequences = [ 0b10000000, 0b00000010,
+		               0b10000000, 0b00010010,
+                               0b10001000, 0b00100010,
+                               0b10010000, 0b10010010,
+                               0b11010000, 0b10011010,
+                               0b11010000, 0b11010010,
+                               0b11011010, 0b11010010,
+                               0b11011010, 0b11011010,
+                               0b11111010, 0b11011010,
+                               0b11111010, 0b11011110,
+                               0b11111000, 0b11111100,
+                               0b11111100, 0b11111100 ]
+                 output = sequences[int((value * 24) - 1 - self.HEAT_SEQ)]
+                 if self.air > 0.0:
+                   output = output + 1
+                 self.output = ~output
+                 self.HEAT_SEQ = (self.HEAT_SEQ + 1) % 2
+                 log.info('Outputting %00X', self.output)
+                 i2c.write([10, self.output])  
         else:
             self.heat = 0.0
+            if i2c_gpio_available:
+              if self.air > 0.0:
+                output = 1
+              else:
+                output = 0
+              self.output = ~output
+              log.info('Outputting %00X', self.output)
+              i2c.write([10, self.output])
+
             if gpio_available:
-               if config.heater_invert:
-                 GPIO.output(config.gpio_heat, GPIO.HIGH)
-               else:
-                 GPIO.output(config.gpio_heat, GPIO.LOW)
+              if config.heater_invert:
+                GPIO.output(config.gpio_heat, GPIO.HIGH)
+              else:
+                GPIO.output(config.gpio_heat, GPIO.LOW)
 
     def set_cool(self, value):
         if value:
@@ -262,13 +298,13 @@ class Oven (threading.Thread):
             if gpio_available:
                 GPIO.output(config.gpio_cool, GPIO.LOW)
             if i2c_gpio_available:
-                gpio2.output(port.[config.gpio_cool], gpio2.HIGH)
+                gpio.output(config.gpio_cool, gpio.HIGH)
         else:
             self.cool = 0.0
             if gpio_available:
                 GPIO.output(config.gpio_cool, GPIO.HIGH)
             if i2c_gpio_available:
-                gpio2.output(port.[config.gpio_cool], gpio2.LOW)
+                gpio.output(config.gpio_cool, gpio.LOW)
 
     def set_air(self, value):
         if value:
@@ -284,6 +320,8 @@ class Oven (threading.Thread):
         state = {
             'runtime': self.runtime,
             'temperature': self.temp_sensor.temperature,
+            'temperature_top': self.temp_sensor.temperature_top,
+            'temperature_bottom': self.temp_sensor.temperature_bottom,
             'target': self.target,
             'state': self.state,
             'heat': self.heat,
@@ -295,6 +333,8 @@ class Oven (threading.Thread):
         return state
 
     def get_door_state(self):
+        if i2c_gpio_available:
+            return "CLOSED"
         if gpio_available:
             return "OPEN" if GPIO.input(config.gpio_door) else "CLOSED"
         else:
@@ -306,12 +346,15 @@ class TempSensor(threading.Thread):
         threading.Thread.__init__(self)
         self.daemon = True
         self.temperature = 0
+        self.temperature_bottom = 0
+        self.temperature_top = 0
         self.time_step = time_step
 
 
 class TempSensorReal(TempSensor):
     def __init__(self, time_step):
         TempSensor.__init__(self, time_step)
+        self.run_num = 0
         if config.max6675:
             log.info("init MAX6675")
             self.thermocouple = MAX6675(config.gpio_sensor_cs,
@@ -321,9 +364,9 @@ class TempSensorReal(TempSensor):
 
         if config.max31850:
             log.info("init MAX31850")
-            self.thermocouple = MAX31850(config.w1_top)
-            self.thermocouple_bottom = MAX31850(config.w1_bottom)
-            self.thermocouple_hotair = MAX31850(config.w1_hotair)
+            self.thermocouple = MAX31850(config.w1_id_pcb)
+            self.thermocouple_bottom = MAX31850(config.w1_id_bottom)
+            self.thermocouple_top = MAX31850(config.w1_id_top)
         if config.max31855:
             log.info("init MAX31855")
             self.thermocouple = MAX31855(config.gpio_sensor_cs,
@@ -338,7 +381,16 @@ class TempSensorReal(TempSensor):
     def run(self):
         while True:
             try:
-                self.temperature = self.thermocouple.get()
+                if (self.run_num <= 0):
+                   self.temperature_top = self.thermocouple_top.get()
+                elif (self.run_num == 4):
+                   self.temperature_bottom = self.thermocouple_bottom.get()
+                else:
+                   if (self.run_num == 8):
+                     self.run_num = 0
+                   self.temperature = self.thermocouple.get()
+                self.run_num = self.run_num + 1
+
             except Exception:
                 log.exception("problem reading temp")
             time.sleep(self.time_step)

@@ -82,7 +82,7 @@ body {
 }
 
 .ds-num {
-    width: 100px;
+    width: 200px;
     font-family: "Digi";
     border-right: 1px solid #b9b6af;
     white-space: nowrap;
@@ -190,7 +190,7 @@ body {
     border: none;
     width: initial;
     text-align: center;
-    width: 168px;
+    width: 268px;
     padding: 0;
 }
 
