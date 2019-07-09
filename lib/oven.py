@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 i2c_gpio_available = False
 
 try:
-    if config.max31855 + config.max6675 + config.max31855spi + config.max31850 > 1:
+    if config.max31855 + config.max6675 + config.max31855spi + config.max31850 > 2:
         log.error("choose (only) one converter IC")
         exit()
     if config.max31850:
@@ -70,13 +70,16 @@ try:
     i2c.init("/dev/i2c-1")  #Initialize module to use /dev/i2c-1
     i2c.open(0x68)          #The slave device address is 0x68 DS1371
 
+
+    i2c.write([0x04, 0xFF, 0xFF, 0xFF]);
     #If we want to write to some register
-    i2c.write([0x07, 0x0E]) #Write 0x0E to register 0x07
-        
+    i2c.write([0x07, 0x4F]) #Write 0x0E to register 0x07
+    # INTCN 1 WDALM 0 AIE 1
+
     #Initialise the GPIO output
     gpio.init() #Initialize module. Always called first
 
-    gpio.setcfg(config.gpio_watchdog, gpio.OUTPUT) # Configure the watchdog
+    # gpio.setcfg(config.gpio_watchdog, gpio.OUTPUT) # Configure the watchdog
     gpio.setcfg(config.gpio_cool, gpio.OUTPUT)     # Configure the cooling output
     gpio.setcfg(config.gpio_reset, gpio.OUTPUT)    # Configure Reset as OUTPUT
     gpio.output(config.gpio_reset, gpio.HIGH)      # Set the i2c GPIO reset line High
@@ -89,7 +92,11 @@ try:
     i2c.write([0, 0x00])  # Set as outputs to HIGH to register 0
 
     i2c_gpio_available = True
-        
+
+    if config.max6675:
+        from max6675 import MAX6675, MAX6675Error
+        log.info("import MAX6675")
+
 except ImportError, e:
     log.error('blah :' +str(e))
     msg = "Could not initialize GPIOs or i2c for OrangePiZero, oven operation will only be simulated!"
@@ -102,9 +109,9 @@ class Watchdog(threading.Thread):
 
    def run(self):
       while True:
-         gpio.output(config.gpio_watchdog, gpio.LOW)
+         # gpio.output(config.gpio_watchdog, gpio.LOW)
          time.sleep(self.time_step)
-         gpio.output(config.gpio_watchdog, gpio.HIGH)
+         # gpio.output(config.gpio_watchdog, gpio.HIGH)
          time.sleep(self.time_step)
 
    def abort_run(self):
@@ -364,7 +371,8 @@ class TempSensorReal(TempSensor):
 
         if config.max31850:
             log.info("init MAX31850")
-            self.thermocouple = MAX31850(config.w1_id_pcb)
+            if (config.max6675 == 0):
+                self.thermocouple = MAX31850(config.w1_id_pcb)
             self.thermocouple_bottom = MAX31850(config.w1_id_bottom)
             self.thermocouple_top = MAX31850(config.w1_id_top)
         if config.max31855:
@@ -386,9 +394,9 @@ class TempSensorReal(TempSensor):
                 elif (self.run_num == 4):
                    self.temperature_bottom = self.thermocouple_bottom.get()
                 else:
-                   if (self.run_num == 8):
+                   if (self.run_num >= 8):
                      self.run_num = 0
-                   self.temperature = self.thermocouple.get()
+                self.temperature = self.thermocouple.get()
                 self.run_num = self.run_num + 1
 
             except Exception:
