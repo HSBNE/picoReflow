@@ -389,7 +389,7 @@ class TempSensorReal(TempSensor):
     def run(self):
         while True:
             try:
-                if (self.run_num <= 0):
+                if (self.run_num == 1):
                    self.temperature_top = self.thermocouple_top.get()
                 elif (self.run_num == 4):
                    self.temperature_bottom = self.thermocouple_bottom.get()
