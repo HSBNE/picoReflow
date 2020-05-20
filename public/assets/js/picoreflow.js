@@ -1,6 +1,6 @@
 var state = "IDLE";
 var state_last = "";
-var graph = [ 'profile', 'live'];
+var graph = [ 'profile', 'live', 'liveT', 'liveB'];
 var points = [];
 var profiles = [];
 var time_mode = 0;
@@ -41,6 +41,23 @@ graph.live =
     draggable: false
 };
 
+graph.liveT =
+{
+    label: "Top", 
+    data: [], 
+    points: { show: false },
+    color: "#af0a0a", 
+    draggable: false
+};
+
+graph.liveB =
+{
+    label: "Bottom",
+    data: [],
+    points: { show: false },
+    color: "#9595f7",
+    draggable: false
+};
 
 function updateProfile(id)
 {
@@ -54,7 +71,7 @@ function updateProfile(id)
     $('#sel_prof_eta').html(job_time);
     $('#sel_prof_cost').html(kwh + ' kWh ('+ currency_type +': '+ cost +')');
     graph.profile.data = profiles[id].data;
-    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live ] , getOptions());
+    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live, graph.liveT, graph.liveB ] , getOptions());
 }
 
 function deleteProfile()
@@ -79,7 +96,7 @@ function deleteProfile()
     $('#e2').select2('val', 0);
     graph.profile.points.show = false;
     graph.profile.draggable = false;
-    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live ], getOptions());
+    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live, graph.liveT, graph.liveB ], getOptions());
 }
 
 
@@ -143,7 +160,7 @@ function updateProfileTable()
                 graph.profile.data[row][col] = value;
             }
             
-            graph.plot = $.plot("#graph_container", [ graph.profile, graph.live ], getOptions());
+            graph.plot = $.plot("#graph_container", [ graph.profile, graph.live , graph.liveT, graph.liveB ], getOptions());
             }
             updateProfileTable();
 
@@ -210,8 +227,10 @@ function runTask()
         "profile": profiles[selected_profile]
     }
 
+    graph.liveT.data = [];
+    graph.liveB.data = [];
     graph.live.data = [];
-    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live ] , getOptions());
+    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live, graph.liveT, graph.liveB ] , getOptions());
 
     ws_control.send(JSON.stringify(cmd));
 
@@ -226,7 +245,9 @@ function runTaskSimulation()
     }
 
     graph.live.data = [];
-    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live ] , getOptions());
+    graph.liveT.data = [];
+    graph.liveB.data = [];
+    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live, graph.liveT, graph.liveB ] , getOptions());
 
     ws_control.send(JSON.stringify(cmd));
 
@@ -251,7 +272,7 @@ function enterNewMode()
     graph.profile.points.show = true;
     graph.profile.draggable = true;
     graph.profile.data = [];
-    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live ], getOptions());
+    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live, graph.liveT, graph.liveB ], getOptions());
     updateProfileTable();
 }
 
@@ -266,7 +287,7 @@ function enterEditMode()
     $('#form_profile_name').val(profiles[selected_profile].name);
     graph.profile.points.show = true;
     graph.profile.draggable = true;
-    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live ], getOptions());
+    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live, graph.liveT, graph.liveB ], getOptions());
     updateProfileTable();
 }
 
@@ -282,7 +303,7 @@ function leaveEditMode()
     $('#profile_table').slideUp();
     graph.profile.points.show = false;
     graph.profile.draggable = false;
-    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live ], getOptions());
+    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live, graph.liveT, graph.liveB ], getOptions());
 }
 
 function newPoint()
@@ -296,14 +317,14 @@ function newPoint()
         var pointx = 0;
     }
     graph.profile.data.push([pointx, Math.floor((Math.random()*230)+25)]);
-    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live ], getOptions());
+    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live, graph.liveT, graph.liveB ], getOptions());
     updateProfileTable();
 }
 
 function delPoint()
 {
     graph.profile.data.splice(-1,1)
-    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live ], getOptions());
+    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live, graph.liveT, graph.liveB ], getOptions());
     updateProfileTable();
 }
 
@@ -500,7 +521,9 @@ $(document).ready(function()
 
                 $.each(x.log, function(i,v) {
                     graph.live.data.push([v.runtime, v.temperature]);
-                    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live ] , getOptions());
+		    graph.liveT.data.push([v.runtime, v.temperature_top]);
+	   	    graph.liveB.data.push([v.runtime, v.temperature_bottom]);
+                    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live, graph.liveT, graph.liveB ] , getOptions());
                 });
             }
 
@@ -533,7 +556,9 @@ $(document).ready(function()
                     $("#nav_stop").show();
 
                     graph.live.data.push([x.runtime, x.temperature]);
-                    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live ] , getOptions());
+	            graph.liveT.data.push([x.runtime, x.temperature_top]);
+		    graph.liveB.data.push([x.runtime, x.temperature_bottom]);
+                    graph.plot = $.plot("#graph_container", [ graph.profile, graph.live, graph.liveT, graph.liveB ] , getOptions());
 
                     left = parseInt(x.totaltime-x.runtime);
                     eta = new Date(left * 1000).toISOString().substr(11, 8);
@@ -552,7 +577,9 @@ $(document).ready(function()
                 }
 
                 $('#act_temp').html(parseInt(x.temperature));
-                
+                $('#top_temp').html(parseInt(x.temperature_top));
+		$('#bot_temp').html(parseInt(x.temperature_bottom));
+
                 if (x.heat > 0.5) { $('#heat').addClass("ds-led-heat-active"); } else { $('#heat').removeClass("ds-led-heat-active"); }
                 if (x.cool > 0.5) { $('#cool').addClass("ds-led-cool-active"); } else { $('#cool').removeClass("ds-led-cool-active"); }
                 if (x.air > 0.5) { $('#air').addClass("ds-led-air-active"); } else { $('#air').removeClass("ds-led-air-active"); }
@@ -614,7 +641,9 @@ $(document).ready(function()
             console.log (e.data);
             x = JSON.parse(e.data);
             graph.live.data.push([x.runtime, x.temperature]);
-            graph.plot = $.plot("#graph_container", [ graph.profile, graph.live ] , getOptions());
+	    graph.liveT.data.push([x.runtime, x.temperature_top]);
+	    graph.liveB.data.push([x.runtime, x.temperature_bottom]);
+            graph.plot = $.plot("#graph_container", [ graph.profile, graph.live , graph.liveT, graph.liveB  ] , getOptions());
 
         }
 

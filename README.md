@@ -1,11 +1,9 @@
-picoReflow
+picoReflow 
 ==========
 
-Turns a Orange Pi Zero into a cheap, universal & web-enabled Reflow Oven Controller.
-Of course, since it is basically just a robot sensing temperature and controlling
-environmental agitators (heating/cooling) you can use it as inspiration / basis
-when you're in need of a PID based temperature controller for your project.
-Don't forget to share and drop a link, when you do :)
+This README and project are being updated as of May 2019, more alterations and uploads as per as-built prototype.
+
+Turns a Orange Pi Zero into a universal & web-enabled Reflow Oven Controller.
 
 Uses a custom PCB with IO expanders, watchdog and thermocouple ICs via 1-wire, SPI and i2c.
 
@@ -19,9 +17,32 @@ Uses a custom PCB with IO expanders, watchdog and thermocouple ICs via 1-wire, S
 
 ## Hardware
 
-  * Raspberry Pi (Rev 2B)
-  * MAX 31855/6675 Cold-Junction K-Type Thermocouple
-  * GPIO driven Solid-State-Relays/MOSFETs
+  * Orange Pi Zero H2+
+  * 4x MAX 31855 1-wire K-Type Thermocouple
+  * 1x MPC23008  8 channel GPIO Expander 
+  * 8x AC zero-crossing Solid-State-Relays
+  * 8x ACS7xx Alegro +-5A Isolated Current Sensor IC 
+  * 1x MPC xxxx 8 channel SPI ADC
+  * 1x Ti xxx Hardware (programmable) watchdog
+  * 1x LT4320 Ideal Diode Bridge Controller (24Vac -> DC)
+  * 1x Relay switched 12V output
+
+### To update/fix on PCB 0.1
+
+  * Power 1-wire from 3.3v OUTPUT of Orange Pi
+  * Switch MOSI/MISO pins on Orange Pi breakout
+  * Add one more AC solid state relays
+  * Add two AC Return pins per "block"
+  * Add DC motor driver/relay
+  * Update OLED display connector pin-out
+  * Change to thermocouple mini blocks instead of terminals
+  * Change to terminal blocks to socket + connector (top entry)
+  * Update overlay to show isolation zones
+  
+### To update/fix in cabling diagram
+
+  * Add thermal fuse
+  * Add front panel deadman display
 
 ## Installation
 
@@ -65,7 +86,7 @@ If you also want to use the in-kernel SPI drivers with a MAX31855 sensor:
 
 ### Clone repo
 
-    $ git clone https://github.com/apollo-ng/picoReflow.git
+    $ git clone https://github.com/ArakniD/picoReflow.git
     $ cd picoReflow
 
 ## Configuration
@@ -108,6 +129,11 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 ## Support & Contact
+
+Please raise issues for This fork of picroReflow here; Otherwise base package
+issues should also go back to the root project :)
+
+### Original works/issues
 
 Please use the issue tracker for project related issues.
 

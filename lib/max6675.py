@@ -1,6 +1,8 @@
 #!/usr/bin/python
-import RPi.GPIO as GPIO
+#import RPi.GPIO as GPIO
 import time
+from pyA20.gpio import gpio
+from pyA20.gpio import port
 
 class MAX6675(object):
     '''Python driver for [MAX6675 Cold-Junction Compensated Thermocouple-to-Digital Converter](http://www.adafruit.com/datasheets/MAX6675.pdf)
@@ -9,7 +11,7 @@ class MAX6675(object):
      - A [Raspberry Pi](http://www.raspberrypi.org/)
 
     '''
-    def __init__(self, cs_pin, clock_pin, data_pin, units = "c", board = GPIO.BCM):
+    def __init__(self, cs_pin, clock_pin, data_pin, units = "c"):
         '''Initialize Soft (Bitbang) SPI bus
 
         Parameters:
@@ -25,16 +27,23 @@ class MAX6675(object):
         self.data_pin = data_pin
         self.units = units
         self.data = None
-        self.board = board
+        #self.board = board
+
+        gpio.init()
+
+        gpio.setcfg(self.cs_pin,    gpio.OUTPUT)
+        gpio.setcfg(self.clock_pin, gpio.OUTPUT)
+        gpio.setcfg(self.data_pin,  gpio.INPUT)
+        gpio.output(self.cs_pin,    gpio.HIGH)
 
         # Initialize needed GPIO
-        GPIO.setmode(self.board)
-        GPIO.setup(self.cs_pin, GPIO.OUT)
-        GPIO.setup(self.clock_pin, GPIO.OUT)
-        GPIO.setup(self.data_pin, GPIO.IN)
+        #GPIO.setmode(self.board)
+        #GPIO.setup(self.cs_pin, GPIO.OUT)
+        #GPIO.setup(self.clock_pin, GPIO.OUT)
+        #GPIO.setup(self.data_pin, GPIO.IN)
 
         # Pull chip select high to make chip inactive
-        GPIO.output(self.cs_pin, GPIO.HIGH)
+        #GPIO.output(self.cs_pin, GPIO.HIGH)
 
     def get(self):
         '''Reads SPI bus and returns current value of thermocouple.'''
@@ -46,18 +55,23 @@ class MAX6675(object):
         '''Reads 16 bits of the SPI bus & stores as an integer in self.data.'''
         bytesin = 0
         # Select the chip
-        GPIO.output(self.cs_pin, GPIO.LOW)
+        gpio.output(self.clock_pin, gpio.LOW)
+        gpio.output(self.cs_pin, gpio.LOW)
+        # GPIO.output(self.cs_pin, GPIO.LOW)
         # Read in 16 bits
         for i in range(16):
-            GPIO.output(self.clock_pin, GPIO.LOW)
+            gpio.output(self.clock_pin, gpio.LOW)
+            # GPIO.output(self.clock_pin, GPIO.LOW)
             time.sleep(0.001)
             bytesin = bytesin << 1
-            if (GPIO.input(self.data_pin)):
+            if (gpio.input(self.data_pin)):
                 bytesin = bytesin | 1
-            GPIO.output(self.clock_pin, GPIO.HIGH)
-        time.sleep(0.001)
+            gpio.output(self.clock_pin, gpio.HIGH)
+            # GPIO.output(self.clock_pin, GPIO.HIGH)
+            time.sleep(0.001)
         # Unselect the chip
-        GPIO.output(self.cs_pin, GPIO.HIGH)
+        gpio.output(self.cs_pin, gpio.HIGH)
+        # GPIO.output(self.cs_pin, GPIO.HIGH)
         # Save data
         self.data = bytesin
 
@@ -93,8 +107,10 @@ class MAX6675(object):
 
     def cleanup(self):
         '''Selective GPIO cleanup'''
-        GPIO.setup(self.cs_pin, GPIO.IN)
-        GPIO.setup(self.clock_pin, GPIO.IN)
+        gpio.setcfg(self.cs_pin, gpio.INPUT)
+        gpio.setcfg(self.clock_pin, gpio.INPUT)
+        # GPIO.setup(self.cs_pin, GPIO.IN)
+        # GPIO.setup(self.clock_pin, GPIO.IN)
 
 class MAX6675Error(Exception):
      def __init__(self, value):
@@ -105,9 +121,9 @@ class MAX6675Error(Exception):
 if __name__ == "__main__":
 
     # default example
-    cs_pin = 24
-    clock_pin = 23
-    data_pin = 22
+    cs_pin = port.PA10
+    clock_pin = port.PA14
+    data_pin = port.PA16
     units = "c"
     thermocouple = MAX6675(cs_pin, clock_pin, data_pin, units)
     running = True

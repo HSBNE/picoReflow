@@ -82,7 +82,7 @@
                     // funny hack to make drag resizing usable
                     if (newx > ax.max)
                     {
-                        graph.plot = $.plot("#graph_container", [ graph.profile, graph.live ] , getOptions());
+                        graph.plot = $.plot("#graph_container", [ graph.profile, graph.live, graph.liveT, graph.liveB ] , getOptions());
                     }
                     else if (newx < (ax.max*0.5) && newx >= ax.datamax && is_last)
                     {
